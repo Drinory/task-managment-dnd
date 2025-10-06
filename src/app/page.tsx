@@ -2,14 +2,20 @@
 
 import { trpc } from '@/lib/trpc/client';
 import { Board } from '@/components/board/Board';
+import { BoardSkeleton } from '@/components/ui/Skeleton';
 
 export default function HomePage() {
   const { data: projects = [], isLoading } = trpc.projects.list.useQuery();
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg text-gray-600">Loading...</div>
+      <div className="min-h-screen bg-gray-50">
+        <header className="border-b bg-white px-8 py-4">
+          <div className="h-8 w-48 animate-pulse rounded bg-gray-200" />
+        </header>
+        <main className="overflow-x-auto">
+          <BoardSkeleton />
+        </main>
       </div>
     );
   }

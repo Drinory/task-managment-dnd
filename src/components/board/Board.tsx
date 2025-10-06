@@ -22,7 +22,7 @@ import {SortableContext, horizontalListSortingStrategy, arrayMove} from '@dnd-ki
 import type { Column, Task } from '@prisma/client';
 import { trpc } from '@/lib/trpc/client';
 import { useMoveColumn, useCreateColumn } from '@/lib/api/columns';
-import { useMoveTask, useRemoveTask, useCreateTask } from '@/lib/api/tasks';
+import { useMoveTask, useRemoveTask } from '@/lib/api/tasks';
 import { ColumnContainer } from './ColumnContainer';
 import { TaskCard } from './TaskCard';
 import { TrashZone } from './TrashZone';
@@ -63,10 +63,10 @@ export function Board({ projectId }: BoardProps) {
 
   // Mutations
   const moveColumn = useMoveColumn(projectId);
-  const createColumn = useCreateColumn();
+  const createColumn = useCreateColumn(projectId);
   const moveTask = useMoveTask(projectId);
   const removeTask = useRemoveTask();
-  const createTask = useCreateTask();
+  // const createTask = useCreateTask(); // TODO: Add task creation UI
 
   // Build tasks by column map - memoized to prevent animation issues
   const serverTasksByColumn = useMemo(() => {

@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { TRPCProvider } from '@/lib/trpc/Provider';
 import { ToastContainer } from '@/components/ui/toast';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -19,10 +20,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <TRPCProvider>
-          {children}
-          <ToastContainer />
-        </TRPCProvider>
+        <ErrorBoundary>
+          <TRPCProvider>
+            {children}
+            <ToastContainer />
+          </TRPCProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

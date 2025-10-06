@@ -90,14 +90,14 @@ export function useRemoveColumn(projectId: string) {
   const utils = trpc.useUtils();
 
   const mutation = trpc.columns.remove.useMutation({
-    onMutate: async ({ columnId }) => {
+    onMutate: async ({ id }) => {
       await utils.columns.listByProject.cancel({ projectId });
 
       const previousColumns = utils.columns.listByProject.getData({ projectId });
 
       // Optimistically remove column
       if (previousColumns) {
-        const optimisticColumns = previousColumns.filter((c) => c.id !== columnId);
+        const optimisticColumns = previousColumns.filter((c) => c.id !== id);
         utils.columns.listByProject.setData({ projectId }, optimisticColumns);
       }
 

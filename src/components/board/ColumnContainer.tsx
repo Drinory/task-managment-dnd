@@ -5,6 +5,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useDroppable } from '@dnd-kit/core';
 import type { Column, Task } from '@prisma/client';
 import { TaskCard } from './TaskCard';
+import { AddTaskButton } from './AddTaskButton';
 
 interface ColumnContainerProps {
   column: Column;
@@ -84,19 +85,20 @@ export function ColumnContainer({
             ⋮⋮
           </button>
         </div>
-        <div className="flex-1 overflow-auto p-3">
+        <div className="flex flex-1 flex-col overflow-auto p-3">
           <SortableContext
             items={tasks.map((t) => t.id)}
             strategy={verticalListSortingStrategy}
           >
             {tasks.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-gray-400">
+              <div className="mb-2 flex flex-1 items-center justify-center text-sm text-gray-400">
                 Drop tasks here
               </div>
             ) : (
               tasks.map((task) => <TaskCard key={task.id} task={task} />)
             )}
           </SortableContext>
+          <AddTaskButton columnId={column.id} />
         </div>
       </div>
     </div>
