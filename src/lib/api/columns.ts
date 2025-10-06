@@ -1,38 +1,30 @@
 'use client';
 
 import { trpc } from '@/lib/trpc/client';
-import { queryKeys } from '@/lib/queryKeys';
-import { useQueryClient } from '@tanstack/react-query';
 import { arrayMove } from '@dnd-kit/sortable';
-import type { Column } from '@prisma/client';
 
 /**
  * Hook for optimistic column move
  * Follows pattern: optimistic update → mutate → settle/rollback
  */
 export function useMoveColumn(projectId: string) {
-  const queryClient = useQueryClient();
   const utils = trpc.useUtils();
 
   const mutation = trpc.columns.move.useMutation({
     onMutate: async ({ columnId, toIndex }) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.columns.byProject(projectId),
-      });
+      // Cancel outgoing refetches to prevent race conditions
+      await utils.columns.listByProject.cancel({ projectId });
 
-      // Snapshot current state
-      const previousColumns = queryClient.getQueryData<Column[]>(
-        queryKeys.columns.byProject(projectId)
-      );
+      // Snapshot current state for rollback
+      const previousColumns = utils.columns.listByProject.getData({ projectId });
 
-      // Optimistically update
+      // Optimistically update - immediately update UI
       if (previousColumns) {
         const fromIndex = previousColumns.findIndex((c) => c.id === columnId);
         if (fromIndex !== -1) {
           const optimisticColumns = arrayMove(previousColumns, fromIndex, toIndex);
-          queryClient.setQueryData(
-            queryKeys.columns.byProject(projectId),
+          utils.columns.listByProject.setData(
+            { projectId },
             optimisticColumns
           );
         }
@@ -40,19 +32,26 @@ export function useMoveColumn(projectId: string) {
 
       return { previousColumns };
     },
+    onSuccess: (updatedColumn) => {
+      // Update cache with server response (has correct order values)
+      // This keeps UI in sync without refetching
+      const currentColumns = utils.columns.listByProject.getData({ projectId });
+      if (currentColumns) {
+        const updatedColumns = currentColumns.map((c) =>
+          c.id === updatedColumn.id ? updatedColumn : c
+        );
+        utils.columns.listByProject.setData({ projectId }, updatedColumns);
+      }
+    },
     onError: (err, variables, context) => {
-      // Rollback on error
+      // Rollback on error by restoring snapshot
       if (context?.previousColumns) {
-        queryClient.setQueryData(
-          queryKeys.columns.byProject(projectId),
+        utils.columns.listByProject.setData(
+          { projectId },
           context.previousColumns
         );
       }
       console.error('Failed to move column:', err.message);
-    },
-    onSettled: () => {
-      // Invalidate to sync with server
-      utils.columns.listByProject.invalidate({ projectId });
     },
   });
 

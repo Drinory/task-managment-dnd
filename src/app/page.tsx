@@ -6,11 +6,6 @@ import { Board } from '@/components/board/Board';
 export default function HomePage() {
   const { data: projects = [], isLoading } = trpc.projects.list.useQuery();
 
-  // Debug: log the actual structure
-  console.log('Projects data:', projects);
-  console.log('Type:', typeof projects);
-  console.log('Is array?', Array.isArray(projects));
-
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">

@@ -10,13 +10,13 @@ type ClassDictionary = Record<string, unknown>;
 type ClassArray = ClassValue[];
 
 function toVal(mix: ClassValue): string {
-  let k: string;
+  let k: string | number;
   let y: string;
   let str = '';
 
   if (typeof mix === 'string' || typeof mix === 'number') {
     str += mix;
-  } else if (typeof mix === 'object') {
+  } else if (typeof mix === 'object' && mix !== null) {
     if (Array.isArray(mix)) {
       const len = mix.length;
       for (k = 0; k < len; k++) {

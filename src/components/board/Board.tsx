@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   DndContext,
@@ -47,9 +47,11 @@ export function Board({ projectId }: BoardProps) {
     projectId,
   });
 
-  const tasksQueries = columns.map((col) =>
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    trpc.tasks.listByColumn.useQuery({ columnId: col.id })
+  // Use useQueries for dynamic parallel queries (avoids hooks in loops)
+  const tasksQueries = trpc.useQueries((t) =>
+    columns.map((col) =>
+      t.tasks.listByColumn({ columnId: col.id }, { enabled: !!col.id })
+    )
   );
 
   // Mutations
@@ -59,11 +61,14 @@ export function Board({ projectId }: BoardProps) {
   const removeTask = useRemoveTask();
   const createTask = useCreateTask();
 
-  // Build tasks by column map
-  const tasksByColumn: Record<string, Task[]> = {};
-  columns.forEach((col, idx) => {
-    tasksByColumn[col.id] = tasksQueries[idx]?.data || [];
-  });
+  // Build tasks by column map - memoized to prevent animation issues
+  const tasksByColumn = useMemo(() => {
+    const map: Record<string, Task[]> = {};
+    columns.forEach((col, idx) => {
+      map[col.id] = tasksQueries[idx]?.data || [];
+    });
+    return map;
+  }, [columns, tasksQueries]);
 
   // Sensors
   const sensors = useSensors(

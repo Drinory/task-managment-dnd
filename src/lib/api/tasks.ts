@@ -1,63 +1,45 @@
 'use client';
 
 import { trpc } from '@/lib/trpc/client';
-import { queryKeys } from '@/lib/queryKeys';
-import { useQueryClient } from '@tanstack/react-query';
 import { arrayMove } from '@dnd-kit/sortable';
-import type { Task } from '@prisma/client';
 
 /**
  * Hook for optimistic task move (within or across columns)
  */
 export function useMoveTask(projectId: string) {
-  const queryClient = useQueryClient();
   const utils = trpc.useUtils();
 
   const mutation = trpc.tasks.move.useMutation({
     onMutate: async ({ taskId, toColumnId, toIndex }) => {
-      // Find which column the task is currently in
-      const allColumnsData = queryClient.getQueryData<
-        Array<{ id: string }>
-      >(queryKeys.columns.byProject(projectId));
-
+      // Find the source column by checking all column queries
+      let fromColumnId: string | null = null;
+      const allColumnsData = utils.columns.listByProject.getData({ projectId });
+      
       if (!allColumnsData) return {};
 
-      const columnIds = allColumnsData.map((c) => c.id);
-
-      // Find the source column
-      let fromColumnId: string | null = null;
-      for (const colId of columnIds) {
-        const tasks = queryClient.getQueryData<Task[]>(
-          queryKeys.tasks.byColumn(colId)
-        );
+      for (const column of allColumnsData) {
+        const tasks = utils.tasks.listByColumn.getData({ columnId: column.id });
         if (tasks?.some((t) => t.id === taskId)) {
-          fromColumnId = colId;
+          fromColumnId = column.id;
           break;
         }
       }
 
       if (!fromColumnId) return {};
 
-      // Cancel queries
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.tasks.byColumn(fromColumnId),
-      });
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.tasks.byColumn(toColumnId),
-      });
+      // Cancel queries to prevent race conditions
+      await utils.tasks.listByColumn.cancel({ columnId: fromColumnId });
+      await utils.tasks.listByColumn.cancel({ columnId: toColumnId });
 
-      // Snapshot
-      const previousFromTasks = queryClient.getQueryData<Task[]>(
-        queryKeys.tasks.byColumn(fromColumnId)
-      );
-      const previousToTasks =
-        fromColumnId === toColumnId
-          ? previousFromTasks
-          : queryClient.getQueryData<Task[]>(
-              queryKeys.tasks.byColumn(toColumnId)
-            );
+      // Snapshot previous data for rollback
+      const previousFromTasks = utils.tasks.listByColumn.getData({ 
+        columnId: fromColumnId 
+      });
+      const previousToTasks = fromColumnId === toColumnId
+        ? previousFromTasks
+        : utils.tasks.listByColumn.getData({ columnId: toColumnId });
 
-      // Optimistic update
+      // Optimistic update - immediately update UI
       if (previousFromTasks) {
         const taskIndex = previousFromTasks.findIndex((t) => t.id === taskId);
         if (taskIndex === -1) return {};
@@ -65,26 +47,26 @@ export function useMoveTask(projectId: string) {
         const task = previousFromTasks[taskIndex];
 
         if (fromColumnId === toColumnId) {
-          // Same column
+          // Same column - reorder
           const optimisticTasks = arrayMove(previousFromTasks, taskIndex, toIndex);
-          queryClient.setQueryData(
-            queryKeys.tasks.byColumn(fromColumnId),
+          utils.tasks.listByColumn.setData(
+            { columnId: fromColumnId },
             optimisticTasks
           );
         } else {
-          // Cross-column
+          // Cross-column - remove from source, add to destination
           const optimisticFromTasks = previousFromTasks.filter(
             (t) => t.id !== taskId
           );
           const optimisticToTasks = [...(previousToTasks || [])];
           optimisticToTasks.splice(toIndex, 0, { ...task, columnId: toColumnId });
 
-          queryClient.setQueryData(
-            queryKeys.tasks.byColumn(fromColumnId),
+          utils.tasks.listByColumn.setData(
+            { columnId: fromColumnId },
             optimisticFromTasks
           );
-          queryClient.setQueryData(
-            queryKeys.tasks.byColumn(toColumnId),
+          utils.tasks.listByColumn.setData(
+            { columnId: toColumnId },
             optimisticToTasks
           );
         }
@@ -92,11 +74,34 @@ export function useMoveTask(projectId: string) {
 
       return { previousFromTasks, previousToTasks, fromColumnId };
     },
+    onSuccess: (updatedTask, { toColumnId }, context) => {
+      // Update the cache with the server response (has correct order values)
+      // This keeps the UI in sync without refetching
+      if (context?.fromColumnId && context.fromColumnId !== toColumnId) {
+        // Cross-column move: update the destination column with server data
+        const currentToTasks = utils.tasks.listByColumn.getData({ columnId: toColumnId });
+        if (currentToTasks) {
+          const updatedToTasks = currentToTasks.map((t) =>
+            t.id === updatedTask.id ? updatedTask : t
+          );
+          utils.tasks.listByColumn.setData({ columnId: toColumnId }, updatedToTasks);
+        }
+      } else if (context?.fromColumnId) {
+        // Same column move: update with server data
+        const currentTasks = utils.tasks.listByColumn.getData({ columnId: context.fromColumnId });
+        if (currentTasks) {
+          const updatedTasks = currentTasks.map((t) =>
+            t.id === updatedTask.id ? updatedTask : t
+          );
+          utils.tasks.listByColumn.setData({ columnId: context.fromColumnId }, updatedTasks);
+        }
+      }
+    },
     onError: (err, { toColumnId }, context) => {
-      // Rollback
+      // Rollback on error by restoring snapshots
       if (context?.previousFromTasks && context.fromColumnId) {
-        queryClient.setQueryData(
-          queryKeys.tasks.byColumn(context.fromColumnId),
+        utils.tasks.listByColumn.setData(
+          { columnId: context.fromColumnId },
           context.previousFromTasks
         );
       }
@@ -105,19 +110,12 @@ export function useMoveTask(projectId: string) {
         context.fromColumnId &&
         context.fromColumnId !== toColumnId
       ) {
-        queryClient.setQueryData(
-          queryKeys.tasks.byColumn(toColumnId),
+        utils.tasks.listByColumn.setData(
+          { columnId: toColumnId },
           context.previousToTasks
         );
       }
       console.error('Failed to move task:', err.message);
-    },
-    onSettled: (data, error, { toColumnId }, context) => {
-      // Invalidate both columns
-      if (context?.fromColumnId) {
-        utils.tasks.listByColumn.invalidate({ columnId: context.fromColumnId });
-      }
-      utils.tasks.listByColumn.invalidate({ columnId: toColumnId });
     },
   });
 
@@ -128,58 +126,15 @@ export function useMoveTask(projectId: string) {
  * Hook for removing a task (trash)
  */
 export function useRemoveTask() {
-  const queryClient = useQueryClient();
   const utils = trpc.useUtils();
 
   const mutation = trpc.tasks.remove.useMutation({
-    onMutate: async ({ taskId }) => {
-      // Find which column the task is in
-      const allQueries = queryClient.getQueriesData<Task[]>({
-        queryKey: ['tasks'],
-      });
-
-      let columnId: string | null = null;
-      let previousTasks: Task[] | undefined;
-
-      for (const [queryKey, tasks] of allQueries) {
-        if (tasks?.some((t) => t.id === taskId)) {
-          columnId = queryKey[2] as string;
-          previousTasks = tasks;
-          break;
-        }
-      }
-
-      if (!columnId || !previousTasks) return {};
-
-      // Cancel
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.tasks.byColumn(columnId),
-      });
-
-      // Optimistic remove
-      const optimisticTasks = previousTasks.filter((t) => t.id !== taskId);
-      queryClient.setQueryData(
-        queryKeys.tasks.byColumn(columnId),
-        optimisticTasks
-      );
-
-      return { previousTasks, columnId };
+    onSuccess: () => {
+      // After successful deletion, invalidate all task queries to refetch
+      utils.tasks.listByColumn.invalidate();
     },
-    onError: (err, variables, context) => {
-      // Rollback
-      if (context?.previousTasks && context.columnId) {
-        queryClient.setQueryData(
-          queryKeys.tasks.byColumn(context.columnId),
-          context.previousTasks
-        );
-      }
+    onError: (err) => {
       console.error('Failed to remove task:', err.message);
-    },
-    onSettled: (data, error, variables, context) => {
-      // Invalidate
-      if (context?.columnId) {
-        utils.tasks.listByColumn.invalidate({ columnId: context.columnId });
-      }
     },
   });
 
