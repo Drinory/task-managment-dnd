@@ -18,7 +18,7 @@ import {
   type UniqueIdentifier,
   type DropAnimation,
 } from '@dnd-kit/core';
-import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
+import {SortableContext, horizontalListSortingStrategy, arrayMove} from '@dnd-kit/sortable';
 import type { Column, Task } from '@prisma/client';
 import { trpc } from '@/lib/trpc/client';
 import { useMoveColumn, useCreateColumn } from '@/lib/api/columns';
@@ -42,10 +42,17 @@ export function Board({ projectId }: BoardProps) {
   const lastOverIdRef = useRef<UniqueIdentifier | null>(null);
   const recentlyMovedRef = useRef(false);
 
+  // Local state for optimistic drag updates
+  const [draggedTasks, setDraggedTasks] = useState<Record<string, Task[]> | null>(null);
+  const [draggedColumns, setDraggedColumns] = useState<Column[] | null>(null); // ADD THIS
+  const clonedTasksRef = useRef<Record<string, Task[]> | null>(null);
+
   // Queries
-  const { data: columns = [] } = trpc.columns.listByProject.useQuery({
+  const { data: serverColumns = [] } = trpc.columns.listByProject.useQuery({
     projectId,
   });
+
+  const columns = draggedColumns ?? serverColumns;
 
   // Use useQueries for dynamic parallel queries (avoids hooks in loops)
   const tasksQueries = trpc.useQueries((t) =>
@@ -62,13 +69,16 @@ export function Board({ projectId }: BoardProps) {
   const createTask = useCreateTask();
 
   // Build tasks by column map - memoized to prevent animation issues
-  const tasksByColumn = useMemo(() => {
+  const serverTasksByColumn = useMemo(() => {
     const map: Record<string, Task[]> = {};
     columns.forEach((col, idx) => {
       map[col.id] = tasksQueries[idx]?.data || [];
     });
     return map;
   }, [columns, tasksQueries]);
+
+  // Use dragged state during drag, server state otherwise
+  const tasksByColumn = draggedTasks ?? serverTasksByColumn;
 
   // Sensors
   const sensors = useSensors(
@@ -125,6 +135,10 @@ export function Board({ projectId }: BoardProps) {
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id);
+    // Clone the current state for potential rollback
+    clonedTasksRef.current = JSON.parse(JSON.stringify(serverTasksByColumn));
+    setDraggedTasks(clonedTasksRef.current);
+    setDraggedColumns([...serverColumns]);
   };
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -138,19 +152,70 @@ export function Board({ projectId }: BoardProps) {
     const overContainer = findContainer(overId);
     const activeContainer = findContainer(active.id);
 
-    if (!overContainer || !activeContainer || activeContainer === overContainer) {
+    if (!overContainer || !activeContainer) {
       return;
     }
 
-    recentlyMovedRef.current = true;
+    // If moving within the same container, don't update here (SortableContext handles it)
+    if (activeContainer === overContainer) {
+      return;
+    }
+
+    // Move task between containers (optimistic UI update during drag)
+    setDraggedTasks((current) => {
+      if (!current) return current;
+
+      const activeItems = current[activeContainer] || [];
+      const overItems = current[overContainer] || [];
+
+      const activeIndex = activeItems.findIndex((t) => t.id === active.id);
+      if (activeIndex === -1) return current;
+
+      const overIndex = overItems.findIndex((t) => t.id === overId);
+      const task = activeItems[activeIndex];
+
+      // Calculate insertion index
+      let newIndex: number;
+      if (overId === overContainer) {
+        // Dropping on the container itself - append to end
+        newIndex = overItems.length;
+      } else if (overIndex >= 0) {
+        // Dropping on a specific task - determine if above or below
+        const isBelowOverItem =
+          over &&
+          active.rect.current.translated &&
+          active.rect.current.translated.top > over.rect.top + over.rect.height;
+        const modifier = isBelowOverItem ? 1 : 0;
+        newIndex = overIndex + modifier;
+      } else {
+        // Fallback - append to end
+        newIndex = overItems.length;
+      }
+
+      recentlyMovedRef.current = true;
+
+      return {
+        ...current,
+        [activeContainer]: activeItems.filter((t) => t.id !== active.id),
+        [overContainer]: [
+          ...overItems.slice(0, newIndex),
+          { ...task, columnId: overContainer as string },
+          ...overItems.slice(newIndex),
+        ],
+      };
+    });
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     const overId = over?.id;
 
+    setActiveId(null); // Clear activeId immediately for overlay
+
     if (!overId) {
-      setActiveId(null);
+      setDraggedTasks(null);
+      setDraggedColumns(null);
+      clonedTasksRef.current = null;
       return;
     }
 
@@ -161,49 +226,67 @@ export function Board({ projectId }: BoardProps) {
         const toIndex = columns.findIndex((c) => c.id === overId);
 
         if (fromIndex !== toIndex) {
+          // Update draggedColumns to show the reordered state
+          const reorderedColumns = arrayMove(columns, fromIndex, toIndex);
+          setDraggedColumns(reorderedColumns); // CHANGE THIS
+
           moveColumn.mutate(
-            {
-              projectId,
-              columnId: active.id as string,
-              toIndex,
-            },
-            {
-              onError: (error) => {
-                showToast(`Failed to move column: ${error.message}`, 'error');
+              {
+                projectId,
+                columnId: active.id as string,
+                toIndex,
               },
-            }
+              {
+                onSettled: () => {
+                  setDraggedTasks(null);
+                  setDraggedColumns(null); // ADD THIS
+                  clonedTasksRef.current = null;
+                },
+                onError: (error) => {
+                  showToast(`Failed to move column: ${error.message}`, 'error');
+                },
+              }
           );
+        } else {
+          setDraggedTasks(null);
+          setDraggedColumns(null); // ADD THIS
+          clonedTasksRef.current = null;
         }
       }
-      setActiveId(null);
       return;
     }
 
     // Handle task operations
     const activeContainer = findContainer(active.id);
     if (!activeContainer) {
-      setActiveId(null);
+      setDraggedTasks(null);
+      setDraggedColumns(null);
+      clonedTasksRef.current = null;
       return;
     }
 
     // Trash
     if (overId === 'trash') {
       removeTask.mutate(
-        { taskId: active.id as string },
-        {
-          onError: (error) => {
-            showToast(`Failed to delete task: ${error.message}`, 'error');
-          },
-        }
+          { taskId: active.id as string },
+          {
+            onSettled: () => {
+              setDraggedTasks(null);
+              clonedTasksRef.current = null;
+            },
+            onError: (error) => {
+              showToast(`Failed to delete task: ${error.message}`, 'error');
+            },
+          }
       );
-      setActiveId(null);
       return;
     }
 
-    // Placeholder - move to new column (not implemented: just show message)
+    // Placeholder
     if (overId === PLACEHOLDER_ID) {
       showToast('Create a column first by clicking the placeholder', 'info');
-      setActiveId(null);
+      setDraggedTasks(null);
+      clonedTasksRef.current = null;
       return;
     }
 
@@ -213,32 +296,64 @@ export function Board({ projectId }: BoardProps) {
       const tasks = tasksByColumn[overContainer] || [];
       let toIndex = tasks.findIndex((t) => t.id === overId);
 
-      // If dropping on the container itself, append
       if (overId === overContainer) {
         toIndex = tasks.length;
       } else if (toIndex === -1) {
         toIndex = 0;
       }
 
-      moveTask.mutate(
-        {
-          taskId: active.id as string,
-          toColumnId: overContainer as string,
-          toIndex,
-        },
-        {
-          onError: (error) => {
-            showToast(`Failed to move task: ${error.message}`, 'error');
-          },
-        }
-      );
-    }
+      // ========== ADD THIS CODE HERE ==========
+      // If reordering within same container, update draggedTasks to match final position
+      if (activeContainer === overContainer) {
+        const currentTasks = tasks;
+        const fromIndex = currentTasks.findIndex((t) => t.id === active.id);
 
-    setActiveId(null);
+        if (fromIndex !== toIndex && fromIndex !== -1) {
+          // Update draggedTasks to show final reordered state
+          setDraggedTasks((current) => {
+            if (!current) return current;
+
+            const reorderedTasks = [...currentTasks];
+            const [movedTask] = reorderedTasks.splice(fromIndex, 1);
+            reorderedTasks.splice(toIndex, 0, movedTask);
+
+            return {
+              ...current,
+              [overContainer]: reorderedTasks,
+            };
+          });
+        }
+      }
+      // ========== END OF NEW CODE ==========
+
+      moveTask.mutate(
+          {
+            taskId: active.id as string,
+            toColumnId: overContainer as string,
+            toIndex,
+          },
+          {
+            onSettled: () => {
+              setDraggedTasks(null);
+              clonedTasksRef.current = null;
+            },
+            onError: (error) => {
+              showToast(`Failed to move task: ${error.message}`, 'error');
+            },
+          }
+      );
+    } else {
+      setDraggedTasks(null);
+      clonedTasksRef.current = null;
+    }
   };
 
   const handleDragCancel = () => {
+    // Clear drag state and restore to server state
     setActiveId(null);
+    setDraggedTasks(null);
+    setDraggedColumns(null);
+    clonedTasksRef.current = null;
   };
 
   const handleAddColumn = () => {
