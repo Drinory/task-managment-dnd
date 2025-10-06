@@ -81,17 +81,23 @@ export function Board({ projectId }: BoardProps) {
   const columnIds = columns.map((c) => c.id);
   const containerIds = new Set<UniqueIdentifier>([...columnIds, PLACEHOLDER_ID, 'trash']);
 
+  // Transform tasksByColumn to just IDs for collision detection
+  const taskIdsByColumn: Record<string, UniqueIdentifier[]> = {};
+  Object.entries(tasksByColumn).forEach(([colId, tasks]) => {
+    taskIdsByColumn[colId] = tasks.map((t) => t.id);
+  });
+
   const collisionDetection = createContainerCollisionDetection(
     activeId,
     containerIds,
     lastOverIdRef,
     recentlyMovedRef,
-    tasksByColumn
+    taskIdsByColumn
   );
 
   const findContainer = useCallback(
     (id: UniqueIdentifier): UniqueIdentifier | undefined => {
-      if (columnIds.includes(id)) return id;
+      if (columnIds.includes(id as string)) return id;
       for (const colId of columnIds) {
         if (tasksByColumn[colId]?.some((t) => t.id === id)) {
           return colId;
@@ -120,7 +126,7 @@ export function Board({ projectId }: BoardProps) {
     const { active, over } = event;
     const overId = over?.id;
 
-    if (!overId || overId === 'trash' || columnIds.includes(active.id)) {
+    if (!overId || overId === 'trash' || columnIds.includes(active.id as string)) {
       return;
     }
 
@@ -144,8 +150,8 @@ export function Board({ projectId }: BoardProps) {
     }
 
     // Handle column reorder
-    if (columnIds.includes(active.id)) {
-      if (columnIds.includes(overId)) {
+    if (columnIds.includes(active.id as string)) {
+      if (columnIds.includes(overId as string)) {
         const fromIndex = columns.findIndex((c) => c.id === active.id);
         const toIndex = columns.findIndex((c) => c.id === overId);
 
@@ -248,7 +254,7 @@ export function Board({ projectId }: BoardProps) {
     if (!activeId) return null;
 
     // Column overlay
-    if (columnIds.includes(activeId)) {
+    if (columnIds.includes(activeId as string)) {
       const column = columns.find((c) => c.id === activeId);
       if (!column) return null;
       const tasks = tasksByColumn[activeId] || [];
@@ -266,7 +272,7 @@ export function Board({ projectId }: BoardProps) {
     return null;
   };
 
-  const isDraggingTask = activeId && !columnIds.includes(activeId);
+  const isDraggingTask = activeId && !columnIds.includes(activeId as string);
 
   if (!mounted) return null;
 
