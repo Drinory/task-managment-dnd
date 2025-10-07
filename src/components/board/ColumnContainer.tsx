@@ -74,8 +74,8 @@ export function ColumnContainer({
   // For overlay, don't use refs
   if (isOverlay) {
     return (
-      <div className="flex h-[500px] w-[300px] flex-col rounded-xl border bg-white shadow-lg">
-        <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
+      <div className="flex h-[500px] w-[300px] flex-col rounded-xl border-2 border-blue-400 bg-gradient-to-b from-white to-gray-50 shadow-2xl">
+        <div className="flex items-center justify-between gap-2 border-b-2 border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3">
           <div className="flex-1">
             <InlineEdit
                 value={column.name}
@@ -86,11 +86,13 @@ export function ColumnContainer({
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">{tasks.length}</span>
+            <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+              {tasks.length}
+            </span>
             <button
                 onClick={handleDeleteClick}
                 disabled={removeColumn.isPending}
-                className="rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-600 shadow-sm transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-600 hover:shadow disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label={`Delete ${column.name} column`}
             >
               🗑️
@@ -98,7 +100,7 @@ export function ColumnContainer({
             <button
                 {...attributes}
                 {...listeners}
-                className="cursor-grab rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                className="cursor-grab rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-600 shadow-sm transition-all hover:border-blue-300 hover:bg-blue-50 hover:shadow active:cursor-grabbing"
                 aria-label={`Drag ${column.name} column`}
             >
               ⋮⋮
@@ -118,11 +120,11 @@ export function ColumnContainer({
     <div ref={setSortableRef} style={style}>
       <div
         ref={setDroppableRef}
-        className={`flex h-[500px] w-[300px] flex-col rounded-xl border bg-white shadow-sm ${
-          isOver ? 'ring-2 ring-blue-400' : ''
+        className={`flex h-[500px] w-[300px] flex-col rounded-xl border bg-gradient-to-b from-white to-gray-50 shadow-md transition-all duration-200 hover:shadow-lg ${
+          isOver ? 'ring-2 ring-blue-400 ring-offset-2 shadow-xl' : ''
         }`}
       >
-        <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
+        <div className="flex items-center justify-between gap-2 border-b bg-gradient-to-r from-gray-50 to-slate-50 px-4 py-3">
           <div className="flex-1">
             <InlineEdit
               value={column.name}
@@ -133,11 +135,13 @@ export function ColumnContainer({
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">{tasks.length}</span>
+            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
+              {tasks.length}
+            </span>
             <button
               onClick={handleDeleteClick}
               disabled={removeColumn.isPending}
-              className="rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+              className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-600 shadow-sm transition-all hover:border-red-300 hover:bg-red-50 hover:text-red-600 hover:shadow disabled:cursor-not-allowed disabled:opacity-50"
               aria-label={`Delete ${column.name} column`}
             >
               🗑️
@@ -145,7 +149,7 @@ export function ColumnContainer({
             <button
               {...attributes}
               {...listeners}
-              className="cursor-grab rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+              className="cursor-grab rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-600 shadow-sm transition-all hover:border-blue-300 hover:bg-blue-50 hover:shadow active:cursor-grabbing"
               aria-label={`Drag ${column.name} column`}
             >
               ⋮⋮
@@ -158,7 +162,7 @@ export function ColumnContainer({
             strategy={verticalListSortingStrategy}
           >
             {tasks.length === 0 ? (
-              <div className="mb-2 flex flex-1 items-center justify-center text-sm text-gray-400">
+              <div className="mb-2 flex flex-1 items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50/50 text-sm text-gray-400">
                 Drop tasks here
               </div>
             ) : (
