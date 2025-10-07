@@ -14,7 +14,7 @@ export function useMoveTask(projectId: string) {
       // Find the source column by checking all column queries
       let fromColumnId: string | null = null;
       const allColumnsData = utils.columns.listByProject.getData({ projectId });
-      
+
       if (!allColumnsData) return {};
 
       for (const column of allColumnsData) {
@@ -32,8 +32,8 @@ export function useMoveTask(projectId: string) {
       await utils.tasks.listByColumn.cancel({ columnId: toColumnId });
 
       // Snapshot previous data for rollback
-      const previousFromTasks = utils.tasks.listByColumn.getData({ 
-        columnId: fromColumnId 
+      const previousFromTasks = utils.tasks.listByColumn.getData({
+        columnId: fromColumnId
       });
       const previousToTasks = fromColumnId === toColumnId
         ? previousFromTasks
@@ -125,16 +125,59 @@ export function useMoveTask(projectId: string) {
 /**
  * Hook for removing a task (trash)
  */
-export function useRemoveTask() {
+/**
+ * Hook for removing a task (trash)
+ */
+export function useRemoveTask(projectId: string) {
   const utils = trpc.useUtils();
 
   const mutation = trpc.tasks.remove.useMutation({
-    onSuccess: () => {
-      // After successful deletion, invalidate all task queries to refetch
-      utils.tasks.listByColumn.invalidate();
+    onMutate: async ({ taskId }) => {
+      // Find which column contains this task
+      let columnId: string | null = null;
+      const allColumnsData = utils.columns.listByProject.getData({ projectId });
+
+      if (!allColumnsData) return {};
+
+      for (const column of allColumnsData) {
+        const tasks = utils.tasks.listByColumn.getData({ columnId: column.id });
+        if (tasks?.some((t) => t.id === taskId)) {
+          columnId = column.id;
+          break;
+        }
+      }
+
+      if (!columnId) return {};
+
+      // Cancel queries to prevent race conditions
+      await utils.tasks.listByColumn.cancel({ columnId });
+
+      // Snapshot previous data for rollback
+      const previousTasks = utils.tasks.listByColumn.getData({ columnId });
+
+      // Optimistic update - immediately remove task from UI
+      if (previousTasks) {
+        const optimisticTasks = previousTasks.filter((t) => t.id !== taskId);
+        utils.tasks.listByColumn.setData({ columnId }, optimisticTasks);
+      }
+
+      return { previousTasks, columnId };
     },
-    onError: (err) => {
+    onError: (err, variables, context) => {
+      // Rollback on error by restoring the task
+      if (context?.previousTasks && context.columnId) {
+        utils.tasks.listByColumn.setData(
+            { columnId: context.columnId },
+            context.previousTasks
+        );
+      }
       console.error('Failed to remove task:', err.message);
+    },
+    onSettled: (data, error, variables, context) => {
+      // Invalidate to ensure sync with server
+      if (context?.columnId) {
+        utils.tasks.listByColumn.invalidate({ columnId: context.columnId });
+      }
     },
   });
 
@@ -156,3 +199,44 @@ export function useCreateTask() {
   return mutation;
 }
 
+/**
+ * Hook for updating a task
+ */
+export function useUpdateTask(columnId: string) {
+  const utils = trpc.useUtils();
+
+  const mutation = trpc.tasks.update.useMutation({
+    onMutate: async ({ id, title, description }) => {
+      await utils.tasks.listByColumn.cancel({ columnId });
+
+      const previousTasks = utils.tasks.listByColumn.getData({ columnId });
+
+      // Optimistically update task
+      if (previousTasks) {
+        const optimisticTasks = previousTasks.map((task) =>
+          task.id === id
+            ? {
+                ...task,
+                ...(title !== undefined && { title }),
+                ...(description !== undefined && { description }),
+              }
+            : task
+        );
+        utils.tasks.listByColumn.setData({ columnId }, optimisticTasks);
+      }
+
+      return { previousTasks };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousTasks) {
+        utils.tasks.listByColumn.setData({ columnId }, context.previousTasks);
+      }
+      console.error('Failed to update task:', err.message);
+    },
+    onSettled: () => {
+      utils.tasks.listByColumn.invalidate({ columnId });
+    },
+  });
+
+  return mutation;
+}

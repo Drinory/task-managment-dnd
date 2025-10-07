@@ -84,6 +84,42 @@ export function useCreateColumn(projectId: string) {
 }
 
 /**
+ * Hook for updating a column name with optimistic update
+ */
+export function useUpdateColumn(projectId: string) {
+  const utils = trpc.useUtils();
+
+  const mutation = trpc.columns.update.useMutation({
+    onMutate: async ({ id, name }) => {
+      await utils.columns.listByProject.cancel({ projectId });
+
+      const previousColumns = utils.columns.listByProject.getData({ projectId });
+
+      // Optimistically update column name
+      if (previousColumns) {
+        const optimisticColumns = previousColumns.map((col) =>
+          col.id === id ? { ...col, name } : col
+        );
+        utils.columns.listByProject.setData({ projectId }, optimisticColumns);
+      }
+
+      return { previousColumns };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousColumns) {
+        utils.columns.listByProject.setData({ projectId }, context.previousColumns);
+      }
+      console.error('Failed to update column:', err.message);
+    },
+    onSettled: () => {
+      utils.columns.listByProject.invalidate({ projectId });
+    },
+  });
+
+  return mutation;
+}
+
+/**
  * Hook for removing a column with optimistic update
  */
 export function useRemoveColumn(projectId: string) {

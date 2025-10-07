@@ -6,12 +6,14 @@ import { useDroppable } from '@dnd-kit/core';
 import type { Column, Task } from '@prisma/client';
 import { TaskCard } from './TaskCard';
 import { AddTaskButton } from './AddTaskButton';
-
+import { InlineEdit } from '@/components/ui/InlineEdit';
+import { useUpdateColumn } from '@/lib/api/columns';
 interface ColumnContainerProps {
   column: Column;
   tasks: Task[];
   isDragging?: boolean;
   isOverlay?: boolean;
+  projectId: string;
 }
 
 export function ColumnContainer({
@@ -19,7 +21,9 @@ export function ColumnContainer({
   tasks,
   isDragging,
   isOverlay,
+  projectId,
 }: ColumnContainerProps) {
+  const updateColumn = useUpdateColumn(projectId);
   const {
     attributes,
     listeners,
@@ -53,11 +57,29 @@ export function ColumnContainer({
   if (isOverlay) {
     return (
       <div className="flex h-[500px] w-[300px] flex-col rounded-xl border bg-white shadow-lg">
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <h3 className="font-semibold text-gray-900">{column.name}</h3>
-          <span className="text-xs text-gray-500">{tasks.length}</span>
+        <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
+          <div className="flex-1">
+            <InlineEdit
+                value={column.name}
+                onSave={(name) => updateColumn.mutate({ id: column.id, name })}
+                className="rounded px-2 py-1 font-semibold text-gray-900"
+                inputClassName="font-semibold"
+                disabled={updateColumn.isPending}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">{tasks.length}</span>
+            <button
+                {...attributes}
+                {...listeners}
+                className="cursor-grab rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                aria-label={`Drag ${column.name} column`}
+            >
+              ⋮⋮
+            </button>
+          </div>
         </div>
-        <div className="flex-1 overflow-auto p-3">
+        <div className="flex flex-1 flex-col overflow-auto p-3">
           {tasks.map((task) => (
             <TaskCard key={task.id} task={task} isOverlay />
           ))}
@@ -74,16 +96,27 @@ export function ColumnContainer({
           isOver ? 'ring-2 ring-blue-400' : ''
         }`}
       >
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <h3 className="font-semibold text-gray-900">{column.name}</h3>
-          <button
-            {...attributes}
-            {...listeners}
-            className="cursor-grab rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-            aria-label={`Drag ${column.name} column`}
-          >
-            ⋮⋮
-          </button>
+        <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
+          <div className="flex-1">
+            <InlineEdit
+              value={column.name}
+              onSave={(name) => updateColumn.mutate({ id: column.id, name })}
+              className="rounded px-2 py-1 font-semibold text-gray-900"
+              inputClassName="font-semibold"
+              disabled={updateColumn.isPending}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">{tasks.length}</span>
+            <button
+              {...attributes}
+              {...listeners}
+              className="cursor-grab rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+              aria-label={`Drag ${column.name} column`}
+            >
+              ⋮⋮
+            </button>
+          </div>
         </div>
         <div className="flex flex-1 flex-col overflow-auto p-3">
           <SortableContext

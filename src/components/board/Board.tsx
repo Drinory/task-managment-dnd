@@ -65,8 +65,7 @@ export function Board({ projectId }: BoardProps) {
   const moveColumn = useMoveColumn(projectId);
   const createColumn = useCreateColumn(projectId);
   const moveTask = useMoveTask(projectId);
-  const removeTask = useRemoveTask();
-  // const createTask = useCreateTask(); // TODO: Add task creation UI
+  const removeTask = useRemoveTask(projectId);
 
   // Build tasks by column map - memoized to prevent animation issues
   const serverTasksByColumn = useMemo(() => {
@@ -267,14 +266,39 @@ export function Board({ projectId }: BoardProps) {
 
     // Trash
     if (overId === 'trash') {
+      // Manually remove task from draggedTasks immediately
+      const taskToRemove = tasksByColumn[activeContainer]?.find((t) => t.id === active.id);
+
+      setDraggedTasks((current) => {
+        if (!current || !activeContainer) return current;
+
+        return {
+          ...current,
+          [activeContainer]: (current[activeContainer] || []).filter(
+              (t) => t.id !== active.id
+          ),
+        };
+      });
+
       removeTask.mutate(
           { taskId: active.id as string },
           {
             onSettled: () => {
               setDraggedTasks(null);
+              setDraggedColumns(null);
               clonedTasksRef.current = null;
             },
             onError: (error) => {
+              // Restore the task on error
+              if (taskToRemove && activeContainer) {
+                setDraggedTasks((current) => {
+                  if (!current) return current;
+                  return {
+                    ...current,
+                    [activeContainer]: [...(current[activeContainer] || []), taskToRemove],
+                  };
+                });
+              }
               showToast(`Failed to delete task: ${error.message}`, 'error');
             },
           }
@@ -378,7 +402,7 @@ export function Board({ projectId }: BoardProps) {
       const column = columns.find((c) => c.id === activeId);
       if (!column) return null;
       const tasks = tasksByColumn[activeId] || [];
-      return <ColumnContainer column={column} tasks={tasks} isOverlay />;
+      return <ColumnContainer column={column} tasks={tasks} isOverlay projectId={projectId} />;
     }
 
     // Task overlay
@@ -420,6 +444,7 @@ export function Board({ projectId }: BoardProps) {
               key={column.id}
               column={column}
               tasks={tasksByColumn[column.id] || []}
+              projectId={projectId}
             />
           ))}
 
