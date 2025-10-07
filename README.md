@@ -66,9 +66,6 @@ This project demonstrates **modern Next.js 14 best practices**:
 - **URL** - Source of truth for routing (projectId)
 - Clear separation: routing state vs. UI state vs. server state
 
-📖 See [`SERVER_CLIENT_ARCHITECTURE.md`](./SERVER_CLIENT_ARCHITECTURE.md) for detailed explanation  
-📖 See [`ZUSTAND_IMPLEMENTATION.md`](./ZUSTAND_IMPLEMENTATION.md) for Zustand patterns
-
 ## Getting Started
 
 ### Prerequisites
@@ -323,8 +320,6 @@ This project was built to demonstrate proficiency with the following technologie
 4. **Production-Ready** - Error handling, loading states, migrations, tests
 
 📖 **Detailed Documentation:**
-- [`SERVER_CLIENT_ARCHITECTURE.md`](./SERVER_CLIENT_ARCHITECTURE.md) - Next.js 14 patterns
-- [`ZUSTAND_IMPLEMENTATION.md`](./ZUSTAND_IMPLEMENTATION.md) - State management strategy
 - [`docs/SAD.md`](./docs/SAD.md) - System architecture decisions
 - [`docs/PRD.md`](./docs/PRD.md) - Product requirements
 
