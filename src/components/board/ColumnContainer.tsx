@@ -29,7 +29,7 @@ export function ColumnContainer({
   const removeColumn = useRemoveColumn(projectId);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showTasksWarning, setShowTasksWarning] = useState(false);
-  
+
   const handleDeleteClick = () => {
     if (tasks.length > 0) {
       setShowTasksWarning(true);
@@ -75,7 +75,7 @@ export function ColumnContainer({
   if (isOverlay) {
     return (
       <div className="flex h-[500px] w-[300px] flex-col rounded-xl border-2 border-blue-400 bg-gradient-to-b from-white to-gray-50 shadow-2xl">
-        <div className="flex items-center justify-between gap-2 border-b-2 border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3">
+        <div className="flex rounded-xl items-center justify-between gap-2 border-b-2 border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3">
           <div className="flex-1">
             <InlineEdit
                 value={column.name}
@@ -121,10 +121,10 @@ export function ColumnContainer({
       <div
         ref={setDroppableRef}
         className={`flex h-[500px] w-[300px] flex-col rounded-xl border bg-gradient-to-b from-white to-gray-50 shadow-md transition-all duration-200 hover:shadow-lg ${
-          isOver ? 'ring-2 ring-blue-400 ring-offset-2 shadow-xl' : ''
+          isOver ? 'ring-2 ring-blue-400 shadow-xl' : ''
         }`}
       >
-        <div className="flex items-center justify-between gap-2 border-b bg-gradient-to-r from-gray-50 to-slate-50 px-4 py-3">
+        <div className="flex items-center justify-between rounded-xl gap-2 border-b bg-gradient-to-r from-gray-50 to-slate-50 px-4 py-3">
           <div className="flex-1">
             <InlineEdit
               value={column.name}
@@ -184,7 +184,7 @@ export function ColumnContainer({
         cancelText="Cancel"
         variant="danger"
       />
-      
+
       <ConfirmDialog
         isOpen={showTasksWarning}
         onClose={() => setShowTasksWarning(false)}
