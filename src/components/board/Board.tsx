@@ -29,6 +29,7 @@ import { TrashZone } from './TrashZone';
 import { createContainerCollisionDetection } from './dnd/collision';
 import { multipleContainersCoordinateGetter } from './dnd/coordinateGetter';
 import { showToast } from '../ui/toast';
+import { useDragStore } from '@/store/dragStore';
 
 const PLACEHOLDER_ID = 'placeholder';
 
@@ -37,14 +38,20 @@ interface BoardProps {
 }
 
 export function Board({ projectId }: BoardProps) {
-  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
+  // Zustand drag store - replaces local useState for drag state
+  const activeId = useDragStore((state) => state.activeId);
+  const setActiveId = useDragStore((state) => state.setActiveId);
+  const draggedTasks = useDragStore((state) => state.draggedTasks);
+  const setDraggedTasks = useDragStore((state) => state.setDraggedTasks);
+  const updateDraggedTasks = useDragStore((state) => state.updateDraggedTasks);
+  const draggedColumns = useDragStore((state) => state.draggedColumns);
+  const setDraggedColumns = useDragStore((state) => state.setDraggedColumns);
+  const resetDragState = useDragStore((state) => state.resetDragState);
+
+  // Local refs and mounted state
   const [mounted, setMounted] = useState(false);
   const lastOverIdRef = useRef<UniqueIdentifier | null>(null);
   const recentlyMovedRef = useRef(false);
-
-  // Local state for optimistic drag updates
-  const [draggedTasks, setDraggedTasks] = useState<Record<string, Task[]> | null>(null);
-  const [draggedColumns, setDraggedColumns] = useState<Column[] | null>(null); // ADD THIS
   const clonedTasksRef = useRef<Record<string, Task[]> | null>(null);
 
   // Queries
@@ -161,7 +168,7 @@ export function Board({ projectId }: BoardProps) {
     }
 
     // Move task between containers (optimistic UI update during drag)
-    setDraggedTasks((current) => {
+    updateDraggedTasks((current) => {
       if (!current) return current;
 
       const activeItems = current[activeContainer] || [];
@@ -212,8 +219,7 @@ export function Board({ projectId }: BoardProps) {
     setActiveId(null); // Clear activeId immediately for overlay
 
     if (!overId) {
-      setDraggedTasks(null);
-      setDraggedColumns(null);
+      resetDragState();
       clonedTasksRef.current = null;
       return;
     }
@@ -237,8 +243,7 @@ export function Board({ projectId }: BoardProps) {
               },
               {
                 onSettled: () => {
-                  setDraggedTasks(null);
-                  setDraggedColumns(null); // ADD THIS
+                  resetDragState();
                   clonedTasksRef.current = null;
                 },
                 onError: (error) => {
@@ -247,8 +252,7 @@ export function Board({ projectId }: BoardProps) {
               }
           );
         } else {
-          setDraggedTasks(null);
-          setDraggedColumns(null); // ADD THIS
+          resetDragState();
           clonedTasksRef.current = null;
         }
       }
@@ -258,8 +262,7 @@ export function Board({ projectId }: BoardProps) {
     // Handle task operations
     const activeContainer = findContainer(active.id);
     if (!activeContainer) {
-      setDraggedTasks(null);
-      setDraggedColumns(null);
+      resetDragState();
       clonedTasksRef.current = null;
       return;
     }
@@ -269,7 +272,7 @@ export function Board({ projectId }: BoardProps) {
       // Manually remove task from draggedTasks immediately
       const taskToRemove = tasksByColumn[activeContainer]?.find((t) => t.id === active.id);
 
-      setDraggedTasks((current) => {
+      updateDraggedTasks((current) => {
         if (!current || !activeContainer) return current;
 
         return {
@@ -284,14 +287,13 @@ export function Board({ projectId }: BoardProps) {
           { taskId: active.id as string },
           {
             onSettled: () => {
-              setDraggedTasks(null);
-              setDraggedColumns(null);
+              resetDragState();
               clonedTasksRef.current = null;
             },
             onError: (error) => {
               // Restore the task on error
               if (taskToRemove && activeContainer) {
-                setDraggedTasks((current) => {
+                updateDraggedTasks((current) => {
                   if (!current) return current;
                   return {
                     ...current,
@@ -309,7 +311,7 @@ export function Board({ projectId }: BoardProps) {
     // Placeholder
     if (overId === PLACEHOLDER_ID) {
       showToast('Create a column first by clicking the placeholder', 'info');
-      setDraggedTasks(null);
+      resetDragState();
       clonedTasksRef.current = null;
       return;
     }
@@ -326,7 +328,6 @@ export function Board({ projectId }: BoardProps) {
         toIndex = 0;
       }
 
-      // ========== ADD THIS CODE HERE ==========
       // If reordering within same container, update draggedTasks to match final position
       if (activeContainer === overContainer) {
         const currentTasks = tasks;
@@ -334,7 +335,7 @@ export function Board({ projectId }: BoardProps) {
 
         if (fromIndex !== toIndex && fromIndex !== -1) {
           // Update draggedTasks to show final reordered state
-          setDraggedTasks((current) => {
+          updateDraggedTasks((current) => {
             if (!current) return current;
 
             const reorderedTasks = [...currentTasks];
@@ -348,7 +349,6 @@ export function Board({ projectId }: BoardProps) {
           });
         }
       }
-      // ========== END OF NEW CODE ==========
 
       moveTask.mutate(
           {
@@ -358,7 +358,7 @@ export function Board({ projectId }: BoardProps) {
           },
           {
             onSettled: () => {
-              setDraggedTasks(null);
+              resetDragState();
               clonedTasksRef.current = null;
             },
             onError: (error) => {
@@ -367,16 +367,14 @@ export function Board({ projectId }: BoardProps) {
           }
       );
     } else {
-      setDraggedTasks(null);
+      resetDragState();
       clonedTasksRef.current = null;
     }
   };
 
   const handleDragCancel = () => {
     // Clear drag state and restore to server state
-    setActiveId(null);
-    setDraggedTasks(null);
-    setDraggedColumns(null);
+    resetDragState();
     clonedTasksRef.current = null;
   };
 
