@@ -7,7 +7,7 @@ import type { Column, Task } from '@prisma/client';
 import { TaskCard } from './TaskCard';
 import { AddTaskButton } from './AddTaskButton';
 import { InlineEdit } from '@/components/ui/InlineEdit';
-import { useUpdateColumn } from '@/lib/api/columns';
+import { useUpdateColumn, useRemoveColumn } from '@/lib/api/columns';
 interface ColumnContainerProps {
   column: Column;
   tasks: Task[];
@@ -24,6 +24,18 @@ export function ColumnContainer({
   projectId,
 }: ColumnContainerProps) {
   const updateColumn = useUpdateColumn(projectId);
+  const removeColumn = useRemoveColumn(projectId);
+  
+  const handleDelete = () => {
+    if (tasks.length > 0) {
+      alert('Cannot delete column with tasks. Please move or delete all tasks first.');
+      return;
+    }
+    if (confirm(`Are you sure you want to delete the column "${column.name}"?`)) {
+      removeColumn.mutate({ id: column.id });
+    }
+  };
+
   const {
     attributes,
     listeners,
@@ -70,6 +82,14 @@ export function ColumnContainer({
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500">{tasks.length}</span>
             <button
+                onClick={handleDelete}
+                disabled={removeColumn.isPending}
+                className="rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                aria-label={`Delete ${column.name} column`}
+            >
+              🗑️
+            </button>
+            <button
                 {...attributes}
                 {...listeners}
                 className="cursor-grab rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
@@ -108,6 +128,14 @@ export function ColumnContainer({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500">{tasks.length}</span>
+            <button
+              onClick={handleDelete}
+              disabled={removeColumn.isPending}
+              className="rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+              aria-label={`Delete ${column.name} column`}
+            >
+              🗑️
+            </button>
             <button
               {...attributes}
               {...listeners}

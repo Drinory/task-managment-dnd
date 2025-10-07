@@ -43,40 +43,55 @@ export function useMoveColumn(projectId: string) {
 /**
  * Hook for creating a new column with optimistic update
  */
+// export function useCreateColumn(projectId: string) {
+//   const utils = trpc.useUtils();
+//
+//   const mutation = trpc.columns.create.useMutation({
+//     onMutate: async (newColumnData) => {
+//       await utils.columns.listByProject.cancel({ projectId });
+//
+//       const previousColumns = utils.columns.listByProject.getData({ projectId });
+//
+//       // Optimistically add new column
+//       if (previousColumns) {
+//         const optimisticColumn = {
+//           id: `temp-${Date.now()}`, // Temporary ID
+//           ...newColumnData,
+//           order: previousColumns.length,
+//           createdAt: new Date(),
+//           updatedAt: new Date(),
+//         };
+//         utils.columns.listByProject.setData(
+//             { projectId },
+//             [...previousColumns, optimisticColumn]
+//         );
+//       }
+//
+//       return { previousColumns };
+//     },
+//     onError: (err, variables, context) => {
+//       if (context?.previousColumns) {
+//         utils.columns.listByProject.setData({ projectId }, context.previousColumns);
+//       }
+//       console.error('Failed to create column:', err.message);
+//     },
+//     onSettled: () => {
+//       utils.columns.listByProject.invalidate({ projectId });
+//     },
+//   });
+//
+//   return mutation;
+// }
 export function useCreateColumn(projectId: string) {
   const utils = trpc.useUtils();
 
   const mutation = trpc.columns.create.useMutation({
-    onMutate: async (newColumnData) => {
-      await utils.columns.listByProject.cancel({ projectId });
-
-      const previousColumns = utils.columns.listByProject.getData({ projectId });
-
-      // Optimistically add new column
-      if (previousColumns) {
-        const optimisticColumn = {
-          id: `temp-${Date.now()}`, // Temporary ID
-          ...newColumnData,
-          order: previousColumns.length,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        utils.columns.listByProject.setData(
-            { projectId },
-            [...previousColumns, optimisticColumn]
-        );
-      }
-
-      return { previousColumns };
-    },
-    onError: (err, variables, context) => {
-      if (context?.previousColumns) {
-        utils.columns.listByProject.setData({ projectId }, context.previousColumns);
-      }
-      console.error('Failed to create column:', err.message);
-    },
-    onSettled: () => {
+    onSuccess: () => {
+      // Just invalidate to refetch with real server data
       utils.columns.listByProject.invalidate({ projectId });
+    },
+    onError: (err) => {
+      console.error('Failed to create column:', err.message);
     },
   });
 
@@ -128,8 +143,10 @@ export function useRemoveColumn(projectId: string) {
   const mutation = trpc.columns.remove.useMutation({
     onMutate: async ({ id }) => {
       await utils.columns.listByProject.cancel({ projectId });
+      await utils.tasks.listByColumn.cancel({ columnId: id });
 
       const previousColumns = utils.columns.listByProject.getData({ projectId });
+      const previousTasks = utils.tasks.listByColumn.getData({ columnId: id });
 
       // Optimistically remove column
       if (previousColumns) {
@@ -137,11 +154,17 @@ export function useRemoveColumn(projectId: string) {
         utils.columns.listByProject.setData({ projectId }, optimisticColumns);
       }
 
-      return { previousColumns };
+      // Optimistically clear tasks for this column
+      utils.tasks.listByColumn.setData({ columnId: id }, []);
+
+      return { previousColumns, previousTasks, columnId: id };
     },
     onError: (err, variables, context) => {
       if (context?.previousColumns) {
         utils.columns.listByProject.setData({ projectId }, context.previousColumns);
+      }
+      if (context?.previousTasks && context.columnId) {
+        utils.tasks.listByColumn.setData({ columnId: context.columnId }, context.previousTasks);
       }
       console.error('Failed to remove column:', err.message);
     },
